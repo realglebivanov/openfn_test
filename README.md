@@ -1,8 +1,17 @@
-# OpenfnTest: withdrawals API
+## Assumptions
 
-A Phoenix service that authorises withdrawals from USD bank accounts and pays them out in a
-currency the caller picks. Callers authenticate with Keycloak bearer tokens. Exchange rates
-come from [Frankfurter](https://frankfurter.dev).
+- One USD account per Keycloak user, linked by `sub`, so the route is `POST /api/withdraw`
+  with no account id in the path. Accounts come from the seeds; there's no sign-up endpoint.
+- Authorising a withdrawal is a hold, not a debit: available = balance − authorised
+  withdrawals. Rejected attempts are stored too. There are no idempotency keys.
+- `amount` is positive with at most 2 decimal places. `converted_amount` is rounded half-up
+  to 2 places for every currency. Money is always `Decimal` / `numeric`, never a float.
+- A currency is valid if Frankfurter has a rate for it. Rates are refreshed every 5 minutes
+  and used for up to 1 hour; after that withdrawals return 503.
+- The authorisation code is the withdrawal id in base64. It's a unique reference, not a
+  secret.
+- Postgres at READ COMMITTED, with `SELECT ... FOR UPDATE` on the account row, so concurrent
+  withdrawals can't overdraw.
 
 ## Running it
 
@@ -72,22 +81,9 @@ Errors use one shape, `{"error": {"code": "...", "message": "..."}}`:
 | 503    | `exchange_rates_unavailable` | no fresh rates are cached (`Retry-After` is set)            |
 | 503    | `auth_unavailable`           | Keycloak config or Redis is unreachable (`Retry-After` is set) |
 
-## Development
+## AI usage
 
-```sh
-docker compose up -d postgres redis keycloak
-mix setup
-mix phx.server
-```
-
-Tokens are issued for `http://keycloak:8080`, so when running the app on the host add
-`127.0.0.1 keycloak` to `/etc/hosts`. The Keycloak admin console is at http://localhost:8080
-(admin/admin).
-
-Tests need Postgres on `localhost:5432` (user and password `postgres`). Keycloak, Redis and
-Frankfurter are replaced by Mox mocks and `Req.Test` stubs, so the tests don't need them.
-
-```sh
-mix test
-mix precommit
-```
+- I wrote [DESIGN.md](DESIGN.md) first: the brief plus my architecture decisions.
+  Claude Code implemented it, following the Phoenix guidelines in [AGENTS.md](AGENTS.md).
+- I reviewed and corrected every change.
+- This README was drafted with AI and edited by me.
