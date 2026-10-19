@@ -7,21 +7,34 @@ defmodule OpenfnTest.Application do
 
   @impl true
   def start(_type, _args) do
-    children = [
-      OpenfnTestWeb.Telemetry,
-      OpenfnTest.Repo,
-      {DNSCluster, query: Application.get_env(:openfn_test, :dns_cluster_query) || :ignore},
-      {Phoenix.PubSub, name: OpenfnTest.PubSub},
-      # Start a worker by calling: OpenfnTest.Worker.start_link(arg)
-      # {OpenfnTest.Worker, arg},
-      # Start to serve requests, typically the last entry
-      OpenfnTestWeb.Endpoint
-    ]
+    children =
+      [
+        OpenfnTestWeb.Telemetry,
+        OpenfnTest.Repo
+      ] ++
+        service_children() ++
+        [
+          # Start to serve requests, typically the last entry
+          OpenfnTestWeb.Endpoint
+        ]
 
     # See https://elixir.hexdocs.pm/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: OpenfnTest.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  # Processes talking to external services. Disabled in tests, which start (or mock) what they need.
+  defp service_children do
+    services = Application.get_env(:openfn_test, :services, [])
+
+    [
+      {:oidc_provider, OpenfnTest.Auth.OidccVerifier},
+      {:redis, OpenfnTest.Auth.RedisRevocationStore},
+      {:exchange_rates, OpenfnTest.ExchangeRates.Fetcher}
+    ]
+    |> Enum.filter(fn {service, _child} -> Keyword.get(services, service, false) end)
+    |> Enum.map(fn {_service, child} -> child end)
   end
 
   # Tell Phoenix to update the endpoint configuration

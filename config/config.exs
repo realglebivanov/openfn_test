@@ -11,6 +11,28 @@ config :openfn_test,
   ecto_repos: [OpenfnTest.Repo],
   generators: [timestamp_type: :utc_datetime]
 
+config :openfn_test,
+  token_verifier: OpenfnTest.Auth.OidccVerifier,
+  revocation_store: OpenfnTest.Auth.RedisRevocationStore,
+  # External service processes started by the application, see OpenfnTest.Application
+  services: [oidc_provider: true, redis: true, exchange_rates: true]
+
+config :openfn_test, OpenfnTest.Auth, signing_algs: ["RS256"]
+
+config :openfn_test, OpenfnTest.ExchangeRates,
+  # How often rates are fetched
+  fetch_interval: :timer.minutes(5),
+  # Rates fetched longer ago than this are never used
+  max_age: :timer.hours(1),
+  # How long old snapshots are kept around
+  retention: :timer.hours(2)
+
+config :openfn_test, OpenfnTest.ExchangeRates.Client,
+  base_url: "https://api.frankfurter.dev",
+  max_attempts: 3,
+  backoff_base: 500,
+  backoff_max: 5_000
+
 # Configure the endpoint
 config :openfn_test, OpenfnTestWeb.Endpoint,
   url: [host: "localhost"],

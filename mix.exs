@@ -49,8 +49,12 @@ defmodule OpenfnTest.MixProject do
       {:telemetry_poller, "~> 1.0"},
       {:gettext, "~> 1.0"},
       {:jason, "~> 1.2"},
-      {:dns_cluster, "~> 0.2.0"},
-      {:bandit, "~> 1.5"}
+      {:bandit, "~> 1.5"},
+      {:oidcc, "~> 3.5"},
+      {:ex_json_schema, "~> 0.11"},
+      {:open_api_spex, "~> 3.21"},
+      {:redix, "~> 1.5"},
+      {:mox, "~> 1.2", only: :test}
     ]
   end
 

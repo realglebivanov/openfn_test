@@ -20,6 +20,17 @@ config :openfn_test, OpenfnTestWeb.Endpoint,
   secret_key_base: "2G2j/7TvwprKdgGrNoasLOmZPyXPfdi2vBz00Xs4Rv0q/5h0mHQ5c8o6e3SbBiqp",
   server: false
 
+# Tests start (or mock) external services themselves
+config :openfn_test,
+  services: [oidc_provider: false, redis: false, exchange_rates: false],
+  token_verifier: OpenfnTest.Auth.TokenVerifierMock,
+  revocation_store: OpenfnTest.Auth.RevocationStoreMock
+
+config :openfn_test, OpenfnTest.ExchangeRates.Client,
+  req_options: [plug: {Req.Test, OpenfnTest.ExchangeRates.Client}],
+  backoff_base: 0,
+  backoff_max: 0
+
 # In test we don't send emails
 config :openfn_test, OpenfnTest.Mailer, adapter: Swoosh.Adapters.Test
 

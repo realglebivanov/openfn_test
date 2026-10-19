@@ -23,6 +23,23 @@ end
 config :openfn_test, OpenfnTestWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
+if config_env() != :test do
+  # Keycloak is configured with a fixed hostname (see docker-compose.yml), so tokens are issued
+  # by http://keycloak:8080 no matter how Keycloak is reached.
+  config :openfn_test, OpenfnTest.Auth,
+    issuer: System.get_env("OIDC_ISSUER", "http://keycloak:8080/realms/openfn"),
+    client_id: System.get_env("OIDC_CLIENT_ID", "openfn-api"),
+    client_secret: System.get_env("OIDC_CLIENT_SECRET", "openfn-api-secret"),
+    allow_unsafe_http:
+      System.get_env("OIDC_ALLOW_UNSAFE_HTTP", to_string(config_env() == :dev)) in ~w(true 1)
+
+  config :openfn_test, :redis_url, System.get_env("REDIS_URL", "redis://localhost:6379/0")
+
+  if frankfurter_url = System.get_env("FRANKFURTER_URL") do
+    config :openfn_test, OpenfnTest.ExchangeRates.Client, base_url: frankfurter_url
+  end
+end
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||

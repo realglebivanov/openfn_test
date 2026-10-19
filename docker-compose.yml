@@ -1,0 +1,84 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    # READ COMMITTED for every transaction; withdrawals rely on SELECT ... FOR UPDATE row locks.
+    command: ["postgres", "-c", "default_transaction_isolation=read committed"]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: openfn_test
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d openfn_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+      # A fixed hostname makes the token issuer http://keycloak:8080/realms/openfn regardless of
+      # whether tokens are requested from the host (localhost:8080) or from inside the network.
+      KC_HOSTNAME: http://keycloak:8080
+      KC_HOSTNAME_ADMIN: http://localhost:8080
+    ports:
+      - "${KEYCLOAK_HOST_PORT:-8080}:8080"
+    volumes:
+      - ./keycloak/openfn-realm.json:/opt/keycloak/data/import/openfn-realm.json:ro
+    healthcheck:
+      # The image has no curl/wget; talk HTTP to the management port over bash's /dev/tcp.
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"status": "UP"' <&3
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 20s
+
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    environment:
+      PHX_SERVER: "true"
+      PHX_HOST: localhost
+      PORT: "4000"
+      # Demo only; generate a real one with `mix phx.gen.secret`.
+      SECRET_KEY_BASE: rtyvRZ0w8ADmM1tHBRDqgy3kqBPLcSd6M0aI4qG2bQ5zsMR6eBQ0kc1T6Gx3D9tS
+      DATABASE_URL: ecto://postgres:postgres@postgres/openfn_test
+      REDIS_URL: redis://redis:6379/0
+      OIDC_ISSUER: http://keycloak:8080/realms/openfn
+      OIDC_CLIENT_ID: openfn-api
+      OIDC_CLIENT_SECRET: openfn-api-secret
+      OIDC_ALLOW_UNSAFE_HTTP: "true"
+    command: ["/bin/sh", "-c", "/app/bin/migrate && /app/bin/seed && exec /app/bin/server"]
+    ports:
+      - "${APP_HOST_PORT:-4000}:4000"
+
+volumes:
+  postgres_data:
